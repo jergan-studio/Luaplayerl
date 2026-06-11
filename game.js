@@ -21,44 +21,39 @@ document.body.appendChild(renderer.domElement);
 camera.position.set(0, 10, 20);
 
 /* =========================
-   LIGHTING (IMPORTANT)
+   LIGHTING
 ========================= */
 
-const ambient = new THREE.AmbientLight(0xffffff, 0.6);
-scene.add(ambient);
+scene.add(new THREE.AmbientLight(0xffffff, 0.6));
 
 const sun = new THREE.DirectionalLight(0xffffff, 1);
 sun.position.set(10, 20, 10);
 scene.add(sun);
 
 /* =========================
-   VOXEL BLOCK SETUP
+   VOXEL BLOCKS
 ========================= */
 
-const BLOCK_SIZE = 1;
-const CHUNK_SIZE = 16;
-
 const geo = new THREE.BoxGeometry(1, 1, 1);
+
 const matGrass = new THREE.MeshStandardMaterial({ color: 0x55aa55 });
 const matDirt = new THREE.MeshStandardMaterial({ color: 0x8b5a2b });
 
 /* =========================
-   CHUNKS STORAGE
+   CHUNK SYSTEM
 ========================= */
 
+const CHUNK_SIZE = 16;
 const chunks = new Map();
 
-function key(cx, cz) {
-  return `${cx},${cz}`;
+function chunkKey(x, z) {
+  return `${x},${z}`;
 }
 
-/* =========================
-   CHUNK GENERATION
-========================= */
-
+/* create chunk */
 function createChunk(cx, cz) {
-  const k = key(cx, cz);
-  if (chunks.has(k)) return;
+  const key = chunkKey(cx, cz);
+  if (chunks.has(key)) return;
 
   const group = new THREE.Group();
 
@@ -68,31 +63,30 @@ function createChunk(cx, cz) {
       const worldX = cx * CHUNK_SIZE + x;
       const worldZ = cz * CHUNK_SIZE + z;
 
-      // simple terrain height (replace later with Perlin noise)
+      // simple terrain (replace later with Perlin noise)
       const height =
         Math.floor(
-          Math.sin(worldX * 0.2) * 2 +
-          Math.cos(worldZ * 0.2) * 2
+          Math.sin(worldX * 0.25) * 2 +
+          Math.cos(worldZ * 0.25) * 2
         );
 
       for (let y = -3; y <= height; y++) {
-        const block = new THREE.Mesh(
-          geo,
-          y === height ? matGrass : matDirt
-        );
+        const mat = y === height ? matGrass : matDirt;
 
+        const block = new THREE.Mesh(geo, mat);
         block.position.set(worldX, y, worldZ);
+
         group.add(block);
       }
     }
   }
 
   scene.add(group);
-  chunks.set(k, group);
+  chunks.set(key, group);
 }
 
 /* =========================
-   LOAD CHUNKS AROUND CAMERA
+   LOAD CHUNKS AROUND PLAYER
 ========================= */
 
 function updateChunks() {
@@ -122,7 +116,7 @@ document.addEventListener("keyup", (e) => {
   keys[e.key.toLowerCase()] = false;
 });
 
-function movePlayer() {
+function move() {
   const speed = 0.25;
 
   if (keys["w"]) camera.position.z -= speed;
@@ -131,22 +125,19 @@ function movePlayer() {
   if (keys["d"]) camera.position.x += speed;
 }
 
-/* =========================
-   CLICK TO LOCK CURSOR (optional FPS feel)
-========================= */
-
+/* optional FPS feel */
 document.addEventListener("click", () => {
   document.body.requestPointerLock?.();
 });
 
 /* =========================
-   MAIN LOOP
+   GAME LOOP
 ========================= */
 
 function animate() {
   requestAnimationFrame(animate);
 
-  movePlayer();
+  move();
   updateChunks();
 
   renderer.render(scene, camera);
