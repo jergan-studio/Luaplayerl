@@ -2,7 +2,7 @@
 <html>
 <head>
   <meta charset="UTF-8">
-  <title>Voxel Chunks</title>
+  <title>Minecraft HTML Engine</title>
   <style>
     body { margin:0; overflow:hidden; }
     #ui {
@@ -12,12 +12,32 @@
       color:white;
       background:rgba(0,0,0,0.5);
       padding:10px;
+      font-family:Arial;
     }
+    #hotbar {
+      position:absolute;
+      bottom:10px;
+      left:50%;
+      transform:translateX(-50%);
+      display:flex;
+      gap:5px;
+    }
+    .slot {
+      width:40px;height:40px;
+      background:rgba(0,0,0,0.5);
+      border:2px solid white;
+      color:white;
+      display:flex;
+      justify-content:center;
+      align-items:center;
+    }
+    .sel { border:2px solid yellow; }
   </style>
 </head>
 <body>
 
-<div id="ui">Loading Chunk World...</div>
+<div id="ui">WASD move | Click lock | ` = Build Mode</div>
+<div id="hotbar"></div>
 
 <script type="module" src="game.js"></script>
 </body>
