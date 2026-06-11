@@ -9,148 +9,193 @@ scene.background = new THREE.Color(0x87ceeb);
 
 const camera = new THREE.PerspectiveCamera(
   75,
-  window.innerWidth / window.innerHeight,
+  innerWidth / innerHeight,
   0.1,
   1000
 );
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
-renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setSize(innerWidth, innerHeight);
 document.body.appendChild(renderer.domElement);
 
-camera.position.set(0, 10, 20);
-
-/* =========================
-   LIGHTING
-========================= */
-
+/* LIGHT */
 scene.add(new THREE.AmbientLight(0xffffff, 0.6));
-
 const sun = new THREE.DirectionalLight(0xffffff, 1);
 sun.position.set(10, 20, 10);
 scene.add(sun);
 
 /* =========================
-   VOXEL BLOCKS
+   WORLD (simple flat ground)
 ========================= */
 
-const geo = new THREE.BoxGeometry(1, 1, 1);
+const blocks = [];
+const geo = new THREE.BoxGeometry(1,1,1);
 
-const matGrass = new THREE.MeshStandardMaterial({ color: 0x55aa55 });
-const matDirt = new THREE.MeshStandardMaterial({ color: 0x8b5a2b });
+const mats = {
+  grass: new THREE.MeshStandardMaterial({ color: 0x55aa55 }),
+  dirt: new THREE.MeshStandardMaterial({ color: 0x8b5a2b }),
+  stone: new THREE.MeshStandardMaterial({ color: 0x888888 })
+};
 
-/* =========================
-   CHUNK SYSTEM
-========================= */
-
-const CHUNK_SIZE = 16;
-const chunks = new Map();
-
-function chunkKey(x, z) {
-  return `${x},${z}`;
+function addBlock(x,y,z,type="grass"){
+  const b = new THREE.Mesh(geo, mats[type]);
+  b.position.set(x,y,z);
+  scene.add(b);
+  blocks.push(b);
 }
 
-/* create chunk */
-function createChunk(cx, cz) {
-  const key = chunkKey(cx, cz);
-  if (chunks.has(key)) return;
-
-  const group = new THREE.Group();
-
-  for (let x = 0; x < CHUNK_SIZE; x++) {
-    for (let z = 0; z < CHUNK_SIZE; z++) {
-
-      const worldX = cx * CHUNK_SIZE + x;
-      const worldZ = cz * CHUNK_SIZE + z;
-
-      // simple terrain (replace later with Perlin noise)
-      const height =
-        Math.floor(
-          Math.sin(worldX * 0.25) * 2 +
-          Math.cos(worldZ * 0.25) * 2
-        );
-
-      for (let y = -3; y <= height; y++) {
-        const mat = y === height ? matGrass : matDirt;
-
-        const block = new THREE.Mesh(geo, mat);
-        block.position.set(worldX, y, worldZ);
-
-        group.add(block);
-      }
-    }
-  }
-
-  scene.add(group);
-  chunks.set(key, group);
-}
-
-/* =========================
-   LOAD CHUNKS AROUND PLAYER
-========================= */
-
-function updateChunks() {
-  const cx = Math.floor(camera.position.x / CHUNK_SIZE);
-  const cz = Math.floor(camera.position.z / CHUNK_SIZE);
-
-  const renderDistance = 2;
-
-  for (let x = -renderDistance; x <= renderDistance; x++) {
-    for (let z = -renderDistance; z <= renderDistance; z++) {
-      createChunk(cx + x, cz + z);
-    }
+/* ground */
+for(let x=-10;x<=10;x++){
+  for(let z=-10;z<=10;z++){
+    addBlock(x,0,z,"grass");
+    addBlock(x,-1,z,"dirt");
   }
 }
 
 /* =========================
-   MOVEMENT SYSTEM
+   PLAYER PHYSICS
+========================= */
+
+const player = {
+  yVel: 0,
+  grounded: false
+};
+
+camera.position.set(0,3,5);
+
+const gravity = -0.015;
+const jumpPower = 0.35;
+
+/* =========================
+   CONTROLS
 ========================= */
 
 const keys = {};
 
-document.addEventListener("keydown", (e) => {
+document.addEventListener("keydown", e=>{
   keys[e.key.toLowerCase()] = true;
+
+  // inventory switch
+  if(e.key==="1") selectedBlock="grass";
+  if(e.key==="2") selectedBlock="dirt";
+  if(e.key==="3") selectedBlock="stone";
+
+  // jump
+  if(e.key===" " && player.grounded){
+    player.yVel = jumpPower;
+    player.grounded = false;
+  }
 });
 
-document.addEventListener("keyup", (e) => {
+document.addEventListener("keyup", e=>{
   keys[e.key.toLowerCase()] = false;
 });
 
-function move() {
-  const speed = 0.25;
+/* =========================
+   INVENTORY
+========================= */
 
-  if (keys["w"]) camera.position.z -= speed;
-  if (keys["s"]) camera.position.z += speed;
-  if (keys["a"]) camera.position.x -= speed;
-  if (keys["d"]) camera.position.x += speed;
+let selectedBlock = "grass";
+
+/* =========================
+   MOBS
+========================= */
+
+const mobs = [];
+
+function spawnMob(x,z){
+  const mob = new THREE.Mesh(
+    new THREE.BoxGeometry(1,1,1),
+    new THREE.MeshStandardMaterial({ color: 0xff4444 })
+  );
+
+  mob.position.set(x,1,z);
+  mob.userData = { speed: 0.02 };
+
+  scene.add(mob);
+  mobs.push(mob);
 }
 
-/* optional FPS feel */
-document.addEventListener("click", () => {
+/* spawn some mobs */
+spawnMob(5,5);
+spawnMob(-5,-5);
+
+/* =========================
+   MOVEMENT
+========================= */
+
+function movePlayer(){
+  const speed = 0.12;
+
+  if(keys["w"]) camera.position.z -= speed;
+  if(keys["s"]) camera.position.z += speed;
+  if(keys["a"]) camera.position.x -= speed;
+  if(keys["d"]) camera.position.x += speed;
+}
+
+/* =========================
+   PHYSICS UPDATE
+========================= */
+
+function physics(){
+
+  // gravity
+  player.yVel += gravity;
+  camera.position.y += player.yVel;
+
+  // ground collision (simple)
+  if(camera.position.y < 2){
+    camera.position.y = 2;
+    player.yVel = 0;
+    player.grounded = true;
+  }
+}
+
+/* =========================
+   MOBS AI
+========================= */
+
+function updateMobs(){
+  mobs.forEach(m => {
+    const dx = camera.position.x - m.position.x;
+    const dz = camera.position.z - m.position.z;
+
+    const dist = Math.sqrt(dx*dx + dz*dz);
+
+    if(dist > 1){
+      m.position.x += (dx / dist) * m.userData.speed;
+      m.position.z += (dz / dist) * m.userData.speed;
+    }
+  });
+}
+
+/* =========================
+   SIMPLE RAY ACTION (optional)
+========================= */
+
+document.addEventListener("click", ()=>{
   document.body.requestPointerLock?.();
 });
 
 /* =========================
-   GAME LOOP
+   LOOP
 ========================= */
 
-function animate() {
+function animate(){
   requestAnimationFrame(animate);
 
-  move();
-  updateChunks();
+  movePlayer();
+  physics();
+  updateMobs();
 
-  renderer.render(scene, camera);
+  renderer.render(scene,camera);
 }
 
 animate();
 
-/* =========================
-   RESIZE FIX
-========================= */
-
-window.addEventListener("resize", () => {
-  camera.aspect = window.innerWidth / window.innerHeight;
+/* resize */
+window.addEventListener("resize",()=>{
+  camera.aspect = innerWidth/innerHeight;
   camera.updateProjectionMatrix();
-  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setSize(innerWidth,innerHeight);
 });
