@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lookalike Game</title>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      font-family: Arial;
+      background: #87CEEB;
+    }
+
+    canvas {
+      display: block;
+    }
+
+    #ui {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      color: white;
+      background: rgba(0,0,0,0.4);
+      padding: 10px;
+      border-radius: 8px;
+    }
+  </style>
+</head>
+<body>
+
+<div id="ui">
+  Click = place block<br>
+  Right Click = break block<br>
+  WASD = move camera
+</div>
+
+<canvas id="game"></canvas>
+
+<script>
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
+
+// simple world grid
+const gridSize = 40;
+const cols = Math.floor(canvas.width / gridSize);
+const rows = Math.floor(canvas.height / gridSize);
+
+let world = [];
+
+// fill ground
+for (let x = 0; x < cols; x++) {
+  world[x] = [];
+  for (let y = 0; y < rows; y++) {
+    world[x][y] = y > rows / 2 ? 1 : 0;
+  }
+}
+
+// camera
+let camX = 0;
+let camY = 0;
+
+// draw world
+function draw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  for (let x = 0; x < cols; x++) {
+    for (let y = 0; y < rows; y++) {
+      if (world[x][y] === 1) {
+        ctx.fillStyle = "#4CAF50";
+        ctx.fillRect(
+          x * gridSize - camX,
+          y * gridSize - camY,
+          gridSize,
+          gridSize
+        );
+      }
+    }
+  }
+}
+
+draw();
+
+// movement
+window.addEventListener("keydown", (e) => {
+  if (e.key === "w") camY -= 10;
+  if (e.key === "s") camY += 10;
+  if (e.key === "a") camX -= 10;
+  if (e.key === "d") camX += 10;
+  draw();
+});
+
+// block interaction
+canvas.addEventListener("click", (e) => {
+  const x = Math.floor((e.clientX + camX) / gridSize);
+  const y = Math.floor((e.clientY + camY) / gridSize);
+
+  if (world[x] && world[x][y] !== undefined) {
+    world[x][y] = 1; // place block
+    draw();
+  }
+});
+
+canvas.addEventListener("contextmenu", (e) => {
+  e.preventDefault();
+
+  const x = Math.floor((e.clientX + camX) / gridSize);
+  const y = Math.floor((e.clientY + camY) / gridSize);
+
+  if (world[x] && world[x][y] !== undefined) {
+    world[x][y] = 0; // break block
+    draw();
+  }
+});
+</script>
+
+</body>
+</html>
