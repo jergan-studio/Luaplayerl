@@ -9,6 +9,8 @@
     body {
       margin: 0;
       overflow: hidden;
+      font-family: Arial;
+      background: #87ceeb;
     }
 
     #ui {
@@ -16,142 +18,205 @@
       top: 10px;
       left: 10px;
       color: white;
-      font-family: Arial;
-      background: rgba(0,0,0,0.4);
+      background: rgba(0,0,0,0.5);
       padding: 10px;
       border-radius: 8px;
       z-index: 10;
+    }
+
+    #hotbar {
+      position: absolute;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 8px;
+      z-index: 10;
+    }
+
+    .slot {
+      width: 50px;
+      height: 50px;
+      background: rgba(0,0,0,0.5);
+      border: 2px solid white;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      cursor: pointer;
+    }
+
+    .selected {
+      border: 2px solid yellow;
     }
   </style>
 </head>
 <body>
 
 <div id="ui">
-  Click = Lock mouse<br>
-  Left Click = Break block<br>
-  Right Click = Place block<br>
-  WASD = Move
+  Click to lock mouse<br>
+  WASD = move<br>
+  Left click = break<br>
+  Right click = place
 </div>
+
+<div id="hotbar"></div>
 
 <script type="module">
 import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.161.0/build/three.module.js";
 import { PointerLockControls } from "https://cdn.jsdelivr.net/npm/three@0.161.0/examples/jsm/controls/PointerLockControls.js";
 
-let scene = new THREE.Scene();
+/* ======================
+   BASIC SETUP
+====================== */
+const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x87ceeb);
 
-let camera = new THREE.PerspectiveCamera(
-  75,
-  window.innerWidth / window.innerHeight,
-  0.1,
-  1000
-);
+const camera = new THREE.PerspectiveCamera(75, innerWidth/innerHeight, 0.1, 1000);
 
-let renderer = new THREE.WebGLRenderer();
-renderer.setSize(window.innerWidth, window.innerHeight);
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(innerWidth, innerHeight);
 document.body.appendChild(renderer.domElement);
 
-// controls
-let controls = new PointerLockControls(camera, document.body);
-document.addEventListener("click", () => controls.lock());
-
-// light
-let light = new THREE.DirectionalLight(0xffffff, 1);
+/* ======================
+   LIGHTING (IMPORTANT)
+====================== */
+const light = new THREE.DirectionalLight(0xffffff, 1);
 light.position.set(10, 20, 10);
 scene.add(light);
 
-// ground blocks
+scene.add(new THREE.AmbientLight(0x404040));
+
+/* ======================
+   CONTROLS
+====================== */
+const controls = new PointerLockControls(camera, document.body);
+document.addEventListener("click", () => controls.lock());
+
+camera.position.set(0, 2, 5);
+
+/* ======================
+   BLOCK SYSTEM
+====================== */
 const blocks = [];
-const boxGeo = new THREE.BoxGeometry(1, 1, 1);
-const boxMat = new THREE.MeshStandardMaterial({ color: 0x55aa55 });
 
-function addBlock(x, y, z) {
-  let cube = new THREE.Mesh(boxGeo, boxMat);
-  cube.position.set(x, y, z);
-  scene.add(cube);
-  blocks.push(cube);
+const materials = {
+  grass: new THREE.MeshStandardMaterial({ color: 0x55aa55 }),
+  dirt: new THREE.MeshStandardMaterial({ color: 0x8b5a2b }),
+  stone: new THREE.MeshStandardMaterial({ color: 0x888888 }),
+  wood: new THREE.MeshStandardMaterial({ color: 0xb5651d })
+};
+
+const blockTypes = ["grass", "dirt", "stone", "wood"];
+let selectedBlock = 0;
+
+const geo = new THREE.BoxGeometry(1,1,1);
+
+function addBlock(x,y,z,type="grass") {
+  const mesh = new THREE.Mesh(geo, materials[type]);
+  mesh.position.set(x,y,z);
+  mesh.userData.type = type;
+  scene.add(mesh);
+  blocks.push(mesh);
 }
 
-// create flat world
-for (let x = -10; x < 10; x++) {
-  for (let z = -10; z < 10; z++) {
-    addBlock(x, 0, z);
+/* ======================
+   WORLD GENERATION
+====================== */
+for (let x=-10; x<=10; x++) {
+  for (let z=-10; z<=10; z++) {
+    addBlock(x,0,z,"grass");
+    addBlock(x,-1,z,"dirt");
+    addBlock(x,-2,z,"stone");
   }
 }
 
-// movement
-let move = { w:false, a:false, s:false, d:false };
+/* ======================
+   RAYCAST
+====================== */
+const raycaster = new THREE.Raycaster();
 
-document.addEventListener("keydown", (e) => {
-  if (e.key === "w") move.w = true;
-  if (e.key === "a") move.a = true;
-  if (e.key === "s") move.s = true;
-  if (e.key === "d") move.d = true;
+/* ======================
+   HOTBAR UI
+====================== */
+const hotbar = document.getElementById("hotbar");
+
+blockTypes.forEach((b,i)=>{
+  const slot = document.createElement("div");
+  slot.className = "slot" + (i===0?" selected":"");
+  slot.innerText = i+1;
+
+  slot.onclick = () => {
+    selectedBlock = i;
+    document.querySelectorAll(".slot").forEach(s=>s.classList.remove("selected"));
+    slot.classList.add("selected");
+  };
+
+  hotbar.appendChild(slot);
 });
 
-document.addEventListener("keyup", (e) => {
-  if (e.key === "w") move.w = false;
-  if (e.key === "a") move.a = false;
-  if (e.key === "s") move.s = false;
-  if (e.key === "d") move.d = false;
+/* ======================
+   INPUT
+====================== */
+const keys = {};
+
+document.addEventListener("keydown", (e)=>{
+  keys[e.key.toLowerCase()] = true;
+
+  if (e.key >= "1" && e.key <= "4") {
+    selectedBlock = Number(e.key)-1;
+  }
 });
 
-// raycasting
-let raycaster = new THREE.Raycaster();
-let mouse = new THREE.Vector2();
+document.addEventListener("keyup", (e)=>{
+  keys[e.key.toLowerCase()] = false;
+});
 
-function getTarget() {
+/* ======================
+   BLOCK BREAK / PLACE
+====================== */
+function getHit() {
   raycaster.setFromCamera(new THREE.Vector2(0,0), camera);
-  let hits = raycaster.intersectObjects(blocks);
-  return hits.length > 0 ? hits[0] : null;
+  return raycaster.intersectObjects(blocks)[0];
 }
 
-// break block
-document.addEventListener("mousedown", (e) => {
-  let hit = getTarget();
+document.addEventListener("mousedown", (e)=>{
+  const hit = getHit();
+  if (!hit) return;
 
-  if (hit) {
-    if (e.button === 0) {
-      // left click remove
-      scene.remove(hit.object);
-      blocks.splice(blocks.indexOf(hit.object), 1);
-    }
+  // break
+  if (e.button === 0) {
+    scene.remove(hit.object);
+    blocks.splice(blocks.indexOf(hit.object),1);
+  }
 
-    if (e.button === 2) {
-      // right click place
-      let pos = hit.object.position.clone();
-      pos.add(hit.face.normal);
-
-      addBlock(
-        Math.round(pos.x),
-        Math.round(pos.y),
-        Math.round(pos.z)
-      );
-    }
+  // place
+  if (e.button === 2) {
+    const pos = hit.object.position.clone().add(hit.face.normal);
+    addBlock(
+      Math.round(pos.x),
+      Math.round(pos.y),
+      Math.round(pos.z),
+      blockTypes[selectedBlock]
+    );
   }
 });
 
-// stop right click menu
-document.addEventListener("contextmenu", e => e.preventDefault());
+document.addEventListener("contextmenu", e=>e.preventDefault());
 
-// camera movement
-camera.position.y = 2;
-
+/* ======================
+   MOVEMENT + LOOP
+====================== */
 function animate() {
   requestAnimationFrame(animate);
 
-  let speed = 0.1;
-
   if (controls.isLocked) {
-    let direction = new THREE.Vector3();
+    const speed = 0.08;
 
-    if (move.w) direction.z -= speed;
-    if (move.s) direction.z += speed;
-    if (move.a) direction.x -= speed;
-    if (move.d) direction.x += speed;
-
-    controls.moveRight(direction.x);
-    controls.moveForward(direction.z);
+    if (keys["w"]) controls.moveForward(speed);
+    if (keys["s"]) controls.moveForward(-speed);
+    if (keys["a"]) controls.moveRight(-speed);
+    if (keys["d"]) controls.moveRight(speed);
   }
 
   renderer.render(scene, camera);
@@ -159,11 +224,13 @@ function animate() {
 
 animate();
 
-// resize
-window.addEventListener("resize", () => {
-  camera.aspect = window.innerWidth / window.innerHeight;
+/* ======================
+   RESIZE
+====================== */
+window.addEventListener("resize", ()=>{
+  camera.aspect = innerWidth/innerHeight;
   camera.updateProjectionMatrix();
-  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setSize(innerWidth, innerHeight);
 });
 </script>
 
