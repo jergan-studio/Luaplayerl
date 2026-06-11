@@ -1,19 +1,14 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Lookalike Game</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Lua Voxel World</title>
+
   <style>
     body {
       margin: 0;
       overflow: hidden;
-      font-family: Arial;
-      background: #87CEEB;
-    }
-
-    canvas {
-      display: block;
     }
 
     #ui {
@@ -21,99 +16,154 @@
       top: 10px;
       left: 10px;
       color: white;
+      font-family: Arial;
       background: rgba(0,0,0,0.4);
       padding: 10px;
       border-radius: 8px;
+      z-index: 10;
     }
   </style>
 </head>
 <body>
 
 <div id="ui">
-  Click = place block<br>
-  Right Click = break block<br>
-  WASD = move camera
+  Click = Lock mouse<br>
+  Left Click = Break block<br>
+  Right Click = Place block<br>
+  WASD = Move
 </div>
 
-<canvas id="game"></canvas>
+<script type="module">
+import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.161.0/build/three.module.js";
+import { PointerLockControls } from "https://cdn.jsdelivr.net/npm/three@0.161.0/examples/jsm/controls/PointerLockControls.js";
 
-<script>
-const canvas = document.getElementById("game");
-const ctx = canvas.getContext("2d");
+let scene = new THREE.Scene();
+scene.background = new THREE.Color(0x87ceeb);
 
-canvas.width = window.innerWidth;
-canvas.height = window.innerHeight;
+let camera = new THREE.PerspectiveCamera(
+  75,
+  window.innerWidth / window.innerHeight,
+  0.1,
+  1000
+);
 
-// simple world grid
-const gridSize = 40;
-const cols = Math.floor(canvas.width / gridSize);
-const rows = Math.floor(canvas.height / gridSize);
+let renderer = new THREE.WebGLRenderer();
+renderer.setSize(window.innerWidth, window.innerHeight);
+document.body.appendChild(renderer.domElement);
 
-let world = [];
+// controls
+let controls = new PointerLockControls(camera, document.body);
+document.addEventListener("click", () => controls.lock());
 
-// fill ground
-for (let x = 0; x < cols; x++) {
-  world[x] = [];
-  for (let y = 0; y < rows; y++) {
-    world[x][y] = y > rows / 2 ? 1 : 0;
-  }
+// light
+let light = new THREE.DirectionalLight(0xffffff, 1);
+light.position.set(10, 20, 10);
+scene.add(light);
+
+// ground blocks
+const blocks = [];
+const boxGeo = new THREE.BoxGeometry(1, 1, 1);
+const boxMat = new THREE.MeshStandardMaterial({ color: 0x55aa55 });
+
+function addBlock(x, y, z) {
+  let cube = new THREE.Mesh(boxGeo, boxMat);
+  cube.position.set(x, y, z);
+  scene.add(cube);
+  blocks.push(cube);
 }
 
-// camera
-let camX = 0;
-let camY = 0;
-
-// draw world
-function draw() {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-  for (let x = 0; x < cols; x++) {
-    for (let y = 0; y < rows; y++) {
-      if (world[x][y] === 1) {
-        ctx.fillStyle = "#4CAF50";
-        ctx.fillRect(
-          x * gridSize - camX,
-          y * gridSize - camY,
-          gridSize,
-          gridSize
-        );
-      }
-    }
+// create flat world
+for (let x = -10; x < 10; x++) {
+  for (let z = -10; z < 10; z++) {
+    addBlock(x, 0, z);
   }
 }
-
-draw();
 
 // movement
-window.addEventListener("keydown", (e) => {
-  if (e.key === "w") camY -= 10;
-  if (e.key === "s") camY += 10;
-  if (e.key === "a") camX -= 10;
-  if (e.key === "d") camX += 10;
-  draw();
+let move = { w:false, a:false, s:false, d:false };
+
+document.addEventListener("keydown", (e) => {
+  if (e.key === "w") move.w = true;
+  if (e.key === "a") move.a = true;
+  if (e.key === "s") move.s = true;
+  if (e.key === "d") move.d = true;
 });
 
-// block interaction
-canvas.addEventListener("click", (e) => {
-  const x = Math.floor((e.clientX + camX) / gridSize);
-  const y = Math.floor((e.clientY + camY) / gridSize);
+document.addEventListener("keyup", (e) => {
+  if (e.key === "w") move.w = false;
+  if (e.key === "a") move.a = false;
+  if (e.key === "s") move.s = false;
+  if (e.key === "d") move.d = false;
+});
 
-  if (world[x] && world[x][y] !== undefined) {
-    world[x][y] = 1; // place block
-    draw();
+// raycasting
+let raycaster = new THREE.Raycaster();
+let mouse = new THREE.Vector2();
+
+function getTarget() {
+  raycaster.setFromCamera(new THREE.Vector2(0,0), camera);
+  let hits = raycaster.intersectObjects(blocks);
+  return hits.length > 0 ? hits[0] : null;
+}
+
+// break block
+document.addEventListener("mousedown", (e) => {
+  let hit = getTarget();
+
+  if (hit) {
+    if (e.button === 0) {
+      // left click remove
+      scene.remove(hit.object);
+      blocks.splice(blocks.indexOf(hit.object), 1);
+    }
+
+    if (e.button === 2) {
+      // right click place
+      let pos = hit.object.position.clone();
+      pos.add(hit.face.normal);
+
+      addBlock(
+        Math.round(pos.x),
+        Math.round(pos.y),
+        Math.round(pos.z)
+      );
+    }
   }
 });
 
-canvas.addEventListener("contextmenu", (e) => {
-  e.preventDefault();
+// stop right click menu
+document.addEventListener("contextmenu", e => e.preventDefault());
 
-  const x = Math.floor((e.clientX + camX) / gridSize);
-  const y = Math.floor((e.clientY + camY) / gridSize);
+// camera movement
+camera.position.y = 2;
 
-  if (world[x] && world[x][y] !== undefined) {
-    world[x][y] = 0; // break block
-    draw();
+function animate() {
+  requestAnimationFrame(animate);
+
+  let speed = 0.1;
+
+  if (controls.isLocked) {
+    let direction = new THREE.Vector3();
+
+    if (move.w) direction.z -= speed;
+    if (move.s) direction.z += speed;
+    if (move.a) direction.x -= speed;
+    if (move.d) direction.x += speed;
+
+    controls.moveRight(direction.x);
+    controls.moveForward(direction.z);
   }
+
+  renderer.render(scene, camera);
+}
+
+animate();
+
+// resize
+window.addEventListener("resize", () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
 });
 </script>
 
